@@ -1,4 +1,5 @@
 library(dplyr)
+library(progress)
 
 # infiles <- list.files(path = here::here(),
 #                      pattern = "[0-9].xls.xlsx")
@@ -26,21 +27,30 @@ data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx"))
 names <- data %>% pull(ParsedName)
 scholar_ids <- readxl::read_xlsx(here::here("scholars.xlsx"))
 
+pb <- progress_bar$new(format = ":what [:bar] :percent",
+                       total = length(names))
 for (name in names) {
   
   if (name %in% scholar_ids$Name) {
-    print(paste(name, "already downloaded"))
+    # print(paste("> ", name, "'s profile has already been downloaded.", sep = ""))
+    pb$tick(tokens = list(what = paste("skipped", name)))
+    Sys.sleep(0.01)
     next
+  } else {
+    scholar_ids <- scholar_ids %>%
+      add_row(Name = name,
+              ID = scholar::get_scholar_id(last_name = stringr::word(name, 1, sep = " "),
+                                           first_name = stringr::word(name, 2, sep = " ")))
+    set.seed(as.numeric(Sys.time()))
+    time_wait <- sample(50:300, 1)/10
+    Sys.sleep(time_wait) # stops getting blocked by Google Scholar
+    
+    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) {
+      break
+      print(names(warnings()))
+    }
+    
+    writexl::write_xlsx(scholar_ids, here::here("scholars.xlsx"))
+    pb$tick(tokens = list(what = paste("downloaded", name)))
   }
-  print(paste("Downloading", name))
-  scholar_ids <- scholar_ids %>%
-    add_row(Name = name,
-            ID = scholar::get_scholar_id(last_name = stringr::word(name, 1, sep = " "),
-                                         first_name = stringr::word(name, 2, sep = " ")))
-  writexl::write_xlsx(scholar_ids, here::here("scholars.xlsx"))
-  
-  set.seed(as.numeric(Sys.time()))
-  time_wait <- sample(50:150, 1)/10
-  Sys.sleep(time_wait) # stops getting blocked by Google Scholar
-  
 }
