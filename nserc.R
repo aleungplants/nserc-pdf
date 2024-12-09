@@ -204,14 +204,14 @@ metrics <- scholar_pubs_precomp %>%
          CompetitionYear = as.numeric(CompetitionYear)-1)
 
 plot_firstauthor_evol <- metrics %>% 
-  filter(Program == "evol. & ecol.") %>% 
+  filter(Program == "evo. & eco.") %>% 
   ggplot(aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
   geom_point() +
   facet_wrap(~ Program) +
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_evol
@@ -220,14 +220,14 @@ ggsave(here::here("firstauthorpubs_time_evolecol.pdf"), plot_firstauthor_evol,
        height = 4, width = 5)
 
 plot_firstauthor_plant <- metrics %>% 
-  filter(Program == "plant & tree biol.") %>% 
+  filter(Program == "plant & tree bio.") %>% 
   ggplot(aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
   geom_point() +
   facet_wrap(~ Program) +
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_plant
