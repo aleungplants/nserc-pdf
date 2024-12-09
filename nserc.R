@@ -199,23 +199,50 @@ metrics <- scholar_pubs_precomp %>%
   group_by(Program, CompetitionYear, Name) %>%
   summarise(nPub = n(),
             nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
-  mutate(CompetitionYear = as.numeric(CompetitionYear)-1)
+  mutate(Program = case_when(Program == "EvoEco" ~ "evol. & ecol.",
+                             Program == "PlantBio" ~ "plant & tree biol."),
+         CompetitionYear = as.numeric(CompetitionYear)-1)
 
-metrics_highcount <- metrics %>%
-  filter(nPub_FirstAuthor > 12)
-
-plot_firstauthor_pub <- ggplot(metrics, aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
-  geom_smooth() +
+plot_firstauthor_evol <- metrics %>% 
+  filter(Program == "evol. & ecol.") %>% 
+  ggplot(aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
   geom_point() +
-  geom_line(aes(group = Name)) +
-  # facet_wrap(~Program) +
+  facet_wrap(~ Program) +
   cowplot::theme_cowplot() +
-  scale_x_continuous(breaks = seq(1991, 2024, 2)) #+
-  # scale_y_continuous(limits = c(0, 15), breaks = seq(0, 30, 5))
-plot_firstauthor_pub
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_continuous(breaks = seq(1991, 2024, 2)) +
+  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  xlab("competition year") +
+  ylab("# of first author publications")
+plot_firstauthor_evol
 
-lm(nPub_FirstAuthor ~ CompetitionYear*Program, data = metrics) %>% summary()
+ggsave(here::here("firstauthorpubs_time_evolecol.pdf"), plot_firstauthor_evol,
+       height = 4, width = 5)
 
-ggsave(here::here("firstauthorpubs.pdf"), plot_firstauthor_pub,
-       height = 3, width = 5)
+plot_firstauthor_plant <- metrics %>% 
+  filter(Program == "plant & tree biol.") %>% 
+  ggplot(aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
+  geom_point() +
+  facet_wrap(~ Program) +
+  cowplot::theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_continuous(breaks = seq(1991, 2024, 2)) +
+  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  xlab("competition year") +
+  ylab("# of first author publications")
+plot_firstauthor_plant
 
+ggsave(here::here("firstauthorpubs_time_plantbiol.pdf"), plot_firstauthor_plant,
+       height = 4, width = 5)
+
+plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) +
+  geom_boxplot(linewidth = 0.25, outliers = FALSE) + # already plotting all points
+  ggbeeswarm::geom_quasirandom(color = "black", size = 0.5, varwidth = TRUE) +
+  cowplot::theme_cowplot() +
+  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  xlab("research subject") +
+  ylab("# of first author publications")
+plot_firstauthor_all
+
+ggsave(here::here("firstauthorpubs_all.pdf"), plot_firstauthor_all,
+       height = 4, width = 3.5)
