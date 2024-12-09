@@ -199,8 +199,8 @@ metrics <- scholar_pubs_precomp %>%
   group_by(Program, CompetitionYear, Name) %>%
   summarise(nPub = n(),
             nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
-  mutate(Program = case_when(Program == "EvoEco" ~ "evol. & ecol.",
-                             Program == "PlantBio" ~ "plant & tree biol."),
+  mutate(Program = case_when(Program == "EvoEco" ~ "evo. & eco.",
+                             Program == "PlantBio" ~ "plant & tree bio."),
          CompetitionYear = as.numeric(CompetitionYear)-1)
 
 plot_firstauthor_evol <- metrics %>% 
