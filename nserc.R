@@ -70,8 +70,8 @@ library(progress)
 #########################################
 
 scholar_ids <- readxl::read_xlsx(here::here("scholars.xlsx"))
-ids <- scholar_ids %>% 
-  na.omit() %>% 
+ids <- scholar_ids %>%
+  filter(!is.na(ID)) %>% 
   pull(ID) %>% 
   unique()
 
@@ -114,10 +114,11 @@ writexl::write_xlsx(scholar_ids_fields, here::here("scholar_ids_fields.xlsx"))
 # Get Google Scholar pubs
 ##########################
 
-scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>%
-  na.omit()
-ids <- scholar_ids %>% 
-  na.omit() %>% 
+scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>% 
+  bind_rows(readxl::read_xlsx(here::here("scholar_ids_20212024.xlsx"))) %>%
+  filter(!is.na(ID))
+ids <- scholar_ids %>%
+  filter(!is.na(ID)) %>%
   pull(ID) %>% 
   unique()
 
@@ -152,21 +153,28 @@ for (id in ids) {
   
 }
 
-# length(pubs$ID %>% unique())
-# length(ids %>% unique())
+length(pubs$ID %>% unique())
+length(ids %>% unique())
+
+setdiff(pubs$ID %>% unique(), ids %>% unique())
 
 #############
 # Count pubs
 #############
 
+library(ggplot2)
 library(sjrdata)
 journals <- sjr_journals %>%
   mutate(journal = stringr::str_to_lower(title), 
          .keep = "unused") %>%
   filter(year == 2023)
 
-scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>%
-  na.omit()
+data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
+  select(Program, CompetitionYear, ParsedName) %>%
+  rename(Name = ParsedName)
+scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>% 
+  bind_rows(readxl::read_xlsx(here::here("scholar_ids_20212024.xlsx"))) %>%
+  filter(!is.na(ID))
 pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
   group_by(ID) %>%
   mutate(FirstAuthor = stringr::word(author, 1, sep = ",") %>% 
@@ -176,4 +184,38 @@ pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
   left_join(journals, by = "journal", relationship = "many-to-many") %>%
   filter(!is.na(sjr_best_quartile))
 
-scholar_pubs <- right_join(scholar_ids, pubs)
+scholar_pubs <- right_join(scholar_ids, pubs) %>%
+  right_join(data, ., relationship = "many-to-many") %>%
+  mutate(Name = stringi::stri_trans_general(Name, "Latin-ASCII"),
+         FirstAuthor = stringi::stri_trans_general(FirstAuthor, "Latin-ASCII"),
+         IsFirstAuthor = stringr::str_detect(Name, FirstAuthor))
+
+scholar_pubs_precomp <- scholar_pubs %>%
+  group_by(CompetitionYear) %>%
+  filter(year_paper <= CompetitionYear) %>%
+  filter(Name != "Robert Latta" | Name == "Robert Latta" & CompetitionYear > 1971)
+
+metrics <- scholar_pubs_precomp %>%
+  group_by(Program, CompetitionYear, Name) %>%
+  summarise(nPub = n(),
+            nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
+  mutate(CompetitionYear = as.numeric(CompetitionYear)-1)
+
+metrics_highcount <- metrics %>%
+  filter(nPub_FirstAuthor > 12)
+
+plot_firstauthor_pub <- ggplot(metrics, aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
+  geom_smooth() +
+  geom_point() +
+  geom_line(aes(group = Name)) +
+  # facet_wrap(~Program) +
+  cowplot::theme_cowplot() +
+  scale_x_continuous(breaks = seq(1991, 2024, 2)) #+
+  # scale_y_continuous(limits = c(0, 15), breaks = seq(0, 30, 5))
+plot_firstauthor_pub
+
+lm(nPub_FirstAuthor ~ CompetitionYear*Program, data = metrics) %>% summary()
+
+ggsave(here::here("firstauthorpubs.pdf"), plot_firstauthor_pub,
+       height = 3, width = 5)
+
