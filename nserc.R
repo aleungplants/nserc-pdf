@@ -106,11 +106,16 @@ for (id in ids) {
   
 }
 
+scholar_ids_fields <- full_join(scholar_ids, scholar_fields)
+writexl::write_xlsx(scholar_ids_fields, here::here("scholar_ids_fields.xlsx"))
+
+
 ##########################
 # Get Google Scholar pubs
 ##########################
 
-scholar_ids <- readxl::read_xlsx(here::here("scholars.xlsx"))
+scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>%
+  na.omit()
 ids <- scholar_ids %>% 
   na.omit() %>% 
   pull(ID) %>% 
@@ -120,7 +125,6 @@ pubs <- readxl::read_xlsx(here::here("pubs.xlsx"))
 
 pb <- progress_bar$new(format = ":what [:bar] :percent",
                        total = length(ids))
-
 for (id in ids) {
   
   if (id %in% pubs$ID) {
@@ -134,8 +138,8 @@ for (id in ids) {
     pubs <- pubs %>%
       bind_rows(nested_pubs %>% tidyr::unnest(cols = "ScholarData"))
     
-    time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
-    Sys.sleep(time_wait)
+    # time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
+    # Sys.sleep(time_wait)
     
     if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
       break
@@ -148,3 +152,28 @@ for (id in ids) {
   
 }
 
+# length(pubs$ID %>% unique())
+# length(ids %>% unique())
+
+#############
+# Count pubs
+#############
+
+library(sjrdata)
+journals <- sjr_journals %>%
+  mutate(journal = stringr::str_to_lower(title), 
+         .keep = "unused") %>%
+  filter(year == 2023)
+
+scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>%
+  na.omit()
+pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
+  group_by(ID) %>%
+  mutate(FirstAuthor = stringr::word(author, 1, sep = ",") %>% 
+           stringr::word(2),
+         year_paper = year,
+         journal = stringr::str_to_lower(journal)) %>%
+  left_join(journals, by = "journal", relationship = "many-to-many") %>%
+  filter(!is.na(sjr_best_quartile))
+
+scholar_pubs <- right_join(scholar_ids, pubs)
