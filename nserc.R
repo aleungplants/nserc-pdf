@@ -1,69 +1,69 @@
 library(dplyr)
 library(progress)
 
+# "CompetitionYear" should actually be the award year, since I got it from the NSERC Fiscal Year. They should have applied the year before.
+
 ###########################
 # Parse NSERC awards sheet
 ###########################
 
-# uncomment to parse names
-#
-# infiles <- list.files(path = here::here("awards data"),
-#                      pattern = "[0-9].xls.xlsx")
-# data <- purrr::map(infiles, ~ mutate(readxl::read_xlsx(here::here(.), skip = 3),
-#                                             Filename = .)) %>%
-#   bind_rows() %>%
-#   mutate(Program = stringr::word(Filename, 1, sep = "_"),
-#                 CompetitionYear = stringr::word(`Fiscal Year`, 1, sep = "-"),
-#                 .keep = "unused") %>%
-#   select(Program, CompetitionYear, contains("Name")) %>%
-#   mutate(FirstName = stringr::word(Name, 2, sep = ", "),
-#          LastName = stringr::word(Name, 1, sep = ", ")) %>%
-#   rowwise() %>%
-#   mutate(FirstMiddleNames = stringr::str_split_1(FirstName, "(?=[A-Z])")[-1] %>% 
-#                   stringr::str_c(collapse = " "),
-#          LastNames = stringr::str_split_1(LastName, "(?=[A-Z])")[-1] %>% 
-#                   stringr::str_c(collapse = "-")) %>%
-#   mutate(ParsedName = stringr::str_c(c(FirstMiddleNames, LastNames), collapse = " ")) %>%
-#   ungroup() %>%
-#   arrange(desc(CompetitionYear))
-# data
-# writexl::write_xlsx(data, here::here("parsednames.xlsx"))
+infiles <- list.files(path = here::here("awards data"),
+                     pattern = "[0-9].xls.xlsx")
+data <- purrr::map(infiles, ~ mutate(readxl::read_xlsx(here::here(.), skip = 3),
+                                            Filename = .)) %>%
+  bind_rows() %>%
+  mutate(Program = stringr::word(Filename, 1, sep = "_"),
+                CompetitionYear = stringr::word(`Fiscal Year`, 1, sep = "-"), 
+                .keep = "unused") %>%
+  select(Program, CompetitionYear, contains("Name")) %>%
+  mutate(FirstName = stringr::word(Name, 2, sep = ", "),
+         LastName = stringr::word(Name, 1, sep = ", ")) %>%
+  rowwise() %>%
+  mutate(FirstMiddleNames = stringr::str_split_1(FirstName, "(?=[A-Z])")[-1] %>%
+                  stringr::str_c(collapse = " "),
+         LastNames = stringr::str_split_1(LastName, "(?=[A-Z])")[-1] %>%
+                  stringr::str_c(collapse = "-")) %>%
+  mutate(ParsedName = stringr::str_c(c(FirstMiddleNames, LastNames), collapse = " ")) %>%
+  ungroup() %>%
+  arrange(desc(CompetitionYear))
+data
+writexl::write_xlsx(data, here::here("parsednames.xlsx"))
 
 
 #########################
 # Get Google Scholar IDs
 #########################
 
-# data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx"))
-# names <- data %>% pull(ParsedName)
-# scholar_ids <- readxl::read_xlsx(here::here("scholars.xlsx"))
-# 
-# pb <- progress_bar$new(format = ":what [:bar] :percent",
-#                        total = length(names))
-# for (name in names) {
-#   
-#   if (name %in% scholar_ids$Name) {
-#     pb$tick(tokens = list(what = paste("skipped", name)))
-#     Sys.sleep(0.001)
-#     next
-#   } else {
-#     scholar_ids <- scholar_ids %>%
-#       add_row(Name = name,
-#               ID = scholar::get_scholar_id(last_name = stringr::word(name, 1, sep = " "),
-#                                            first_name = stringr::word(name, 2, sep = " ")))
-#     set.seed(as.numeric(Sys.time()))
-#     time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked 
-#     Sys.sleep(time_wait)
-#     
-#     if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
-#       break
-#       print(names(warnings()))
-#     }
-#     
-#     writexl::write_xlsx(scholar_ids, here::here("scholars.xlsx"))
-#     pb$tick(tokens = list(what = paste("downloaded", name)))
-#   }
-# }
+data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx"))
+names <- data %>% pull(ParsedName)
+scholar_ids <- readxl::read_xlsx(here::here("scholars.xlsx"))
+
+pb <- progress_bar$new(format = ":what [:bar] :percent",
+                       total = length(names))
+for (name in names) {
+
+  if (name %in% scholar_ids$Name) {
+    pb$tick(tokens = list(what = paste("skipped", name)))
+    Sys.sleep(0.001)
+    next
+  } else {
+    scholar_ids <- scholar_ids %>%
+      add_row(Name = name,
+              ID = scholar::get_scholar_id(last_name = stringr::word(name, 1, sep = " "),
+                                           first_name = stringr::word(name, 2, sep = " ")))
+    set.seed(as.numeric(Sys.time()))
+    time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
+    Sys.sleep(time_wait)
+
+    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
+      break
+      print(names(warnings()))
+    }
+
+    writexl::write_xlsx(scholar_ids, here::here("scholars.xlsx"))
+    pb$tick(tokens = list(what = paste("downloaded", name)))
+  }
+}
 
 #########################################
 # Check Google Scholar areas of interest
@@ -188,7 +188,8 @@ scholar_pubs <- right_join(scholar_ids, pubs) %>%
   right_join(data, ., relationship = "many-to-many") %>%
   mutate(Name = stringi::stri_trans_general(Name, "Latin-ASCII"),
          FirstAuthor = stringi::stri_trans_general(FirstAuthor, "Latin-ASCII"),
-         IsFirstAuthor = stringr::str_detect(Name, FirstAuthor))
+         IsFirstAuthor = stringr::str_detect(Name, FirstAuthor),
+         CompetitionYear = as.numeric(CompetitionYear)-1) # !!!fixing error where I used the fiscal year and not the competition year!!!
 
 scholar_pubs_precomp <- scholar_pubs %>%
   group_by(CompetitionYear) %>%
@@ -200,8 +201,9 @@ metrics <- scholar_pubs_precomp %>%
   summarise(nPub = n(),
             nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
   mutate(Program = case_when(Program == "EvoEco" ~ "evo. & eco.",
-                             Program == "PlantBio" ~ "plant & tree bio."),
-         CompetitionYear = as.numeric(CompetitionYear)-1)
+                             Program == "PlantBio" ~ "plant & tree bio."))
+
+metrics %>% filter(nPub_FirstAuthor > 15)
 
 plot_firstauthor_evol <- metrics %>% 
   filter(Program == "evo. & eco.") %>% 
@@ -216,8 +218,8 @@ plot_firstauthor_evol <- metrics %>%
   ylab("# of first author publications")
 plot_firstauthor_evol
 
-ggsave(here::here("firstauthorpubs_time_evolecol.pdf"), plot_firstauthor_evol,
-       height = 4, width = 5)
+ggsave(here::here("firstauthorpubs_time_evolecol.png"), plot_firstauthor_evol,
+       dpi = 300, bg = "white", height = 4, width = 5)
 
 plot_firstauthor_plant <- metrics %>% 
   filter(Program == "plant & tree bio.") %>% 
@@ -232,8 +234,8 @@ plot_firstauthor_plant <- metrics %>%
   ylab("# of first author publications")
 plot_firstauthor_plant
 
-ggsave(here::here("firstauthorpubs_time_plantbiol.pdf"), plot_firstauthor_plant,
-       height = 4, width = 5)
+ggsave(here::here("firstauthorpubs_time_plantbiol.png"), plot_firstauthor_plant,
+       dpi = 300, bg = "white", height = 4, width = 5)
 
 plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) +
   geom_boxplot(linewidth = 0.25, outliers = FALSE) + # already plotting all points
@@ -244,5 +246,21 @@ plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) 
   ylab("# of first author publications")
 plot_firstauthor_all
 
-ggsave(here::here("firstauthorpubs_all.pdf"), plot_firstauthor_all,
-       height = 4, width = 3.5)
+ggsave(here::here("firstauthorpubs_all.png"), plot_firstauthor_all,
+       dpi = 300, bg = "white", height = 4, width = 3.5)
+
+##########################
+# Some summary statistics
+##########################
+
+summary <- metrics %>% 
+  group_by(Program) %>% 
+  summarise(across(c(nPub_FirstAuthor),
+                   list(n = ~n(),
+                        median = median,
+                        q1 = ~quantile(., prob = 0.25),
+                        q3 = ~quantile(., prob = 0.75))))
+summary
+
+
+
