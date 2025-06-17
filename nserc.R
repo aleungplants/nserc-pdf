@@ -9,7 +9,7 @@ library(progress)
 
 infiles <- list.files(path = here::here("awards data"),
                      pattern = "[0-9].xls.xlsx")
-data <- purrr::map(infiles, ~ mutate(readxl::read_xlsx(here::here(.), skip = 3),
+data <- purrr::map(infiles, ~ mutate(readxl::read_xlsx(here::here("awards data", .), skip = 3),
                                             Filename = .)) %>%
   bind_rows() %>%
   mutate(Program = stringr::word(Filename, 1, sep = "_"),
@@ -28,6 +28,8 @@ data <- purrr::map(infiles, ~ mutate(readxl::read_xlsx(here::here(.), skip = 3),
   arrange(desc(CompetitionYear))
 data
 writexl::write_xlsx(data, here::here("parsednames.xlsx"))
+writexl::write_xlsx(data %>% filter(Program == "AnimalBio"), here::here("parsednames_animalbio.xlsx"))
+
 
 
 #########################
@@ -44,7 +46,7 @@ for (name in names) {
 
   if (name %in% scholar_ids$Name) {
     pb$tick(tokens = list(what = paste("skipped", name)))
-    Sys.sleep(0.001)
+    Sys.sleep(0.002)
     next
   } else {
     scholar_ids <- scholar_ids %>%
@@ -55,10 +57,10 @@ for (name in names) {
     time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
     Sys.sleep(time_wait)
 
-    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
-      break
-      print(names(warnings()))
-    }
+    # if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
+    #   break
+    #   print(names(warnings()))
+    # }
 
     writexl::write_xlsx(scholar_ids, here::here("scholars.xlsx"))
     pb$tick(tokens = list(what = paste("downloaded", name)))
@@ -95,11 +97,11 @@ for (id in ids) {
     # time_wait <- sample(10:30, 1)/10
     # Sys.sleep(time_wait)
     
-    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
-      break
-      print(names(warnings()))
-    }
-    
+    # if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
+    #   break
+    #   print(names(warnings()))
+    # }
+    # 
     writexl::write_xlsx(scholar_fields, here::here("scholar_fields.xlsx"))
     pb$tick(tokens = list(what = paste("downloaded", id)))
   }
@@ -139,7 +141,7 @@ for (id in ids) {
     pubs <- pubs %>%
       bind_rows(nested_pubs %>% tidyr::unnest(cols = "ScholarData"))
     
-    # time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
+    time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
     # Sys.sleep(time_wait)
     
     if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
@@ -162,6 +164,7 @@ setdiff(pubs$ID %>% unique(), ids %>% unique())
 # Count pubs
 #############
 
+library(dplyr)
 library(ggplot2)
 library(sjrdata)
 journals <- sjr_journals %>%
@@ -169,13 +172,27 @@ journals <- sjr_journals %>%
          .keep = "unused") %>%
   filter(year == 2023)
 
+exclude_names <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
+  filter(is.na(Name)) %>%
+  pull(ParsedName)
+
 data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
   select(Program, CompetitionYear, ParsedName) %>%
   rename(Name = ParsedName)
+
 scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>% 
   bind_rows(readxl::read_xlsx(here::here("scholar_ids_20212024.xlsx"))) %>%
   filter(!is.na(ID))
+
+exclude_names <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
+  filter(is.na(Name)) %>%
+  pull(ParsedName)
+exclude_ids <- scholar_ids %>%
+  filter(Name %in% exclude_names) %>%
+  pull(ID)
+
 pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
+  filter(!ID %in% exclude_ids) %>%
   group_by(ID) %>%
   mutate(FirstAuthor = stringr::word(author, 1, sep = ",") %>% 
            stringr::word(2),
@@ -201,9 +218,10 @@ metrics <- scholar_pubs_precomp %>%
   summarise(nPub = n(),
             nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
   mutate(Program = case_when(Program == "EvoEco" ~ "evo. & eco.",
-                             Program == "PlantBio" ~ "plant & tree bio."))
+                             Program == "PlantBio" ~ "plant & tree bio.",
+                             Program == "AnimalBio" ~ "animal bio."))
 
-metrics %>% filter(nPub_FirstAuthor > 15)
+metrics %>% filter(nPub_FirstAuthor > 14)
 
 plot_firstauthor_evol <- metrics %>% 
   filter(Program == "evo. & eco.") %>% 
@@ -212,8 +230,8 @@ plot_firstauthor_evol <- metrics %>%
   facet_wrap(~ Program) +
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
+  scale_x_continuous(breaks = seq(1991, 2022, 2)) +
+  # scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_evol
@@ -229,7 +247,7 @@ plot_firstauthor_plant <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
+  # scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_plant
@@ -241,7 +259,7 @@ plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) 
   geom_boxplot(linewidth = 0.25, outliers = FALSE) + # already plotting all points
   ggbeeswarm::geom_quasirandom(color = "black", size = 0.5, varwidth = TRUE) +
   cowplot::theme_cowplot() +
-  scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  # scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
   xlab("research subject") +
   ylab("# of first author publications")
 plot_firstauthor_all
