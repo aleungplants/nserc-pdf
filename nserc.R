@@ -144,10 +144,10 @@ for (id in ids) {
     time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
     # Sys.sleep(time_wait)
     
-    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
-      break
-      print(names(warnings()))
-    }
+    # if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
+    #   break
+    #   print(names(warnings()))
+    # }
     
     writexl::write_xlsx(pubs, here::here("pubs.xlsx"))
     pb$tick(tokens = list(what = paste("downloaded", id)))
