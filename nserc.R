@@ -142,13 +142,13 @@ for (id in ids) {
       bind_rows(nested_pubs %>% tidyr::unnest(cols = "ScholarData"))
     
     time_wait <- sample(50:300, 1)/10 # randomized 5 to 30 second wait, worked well so far with not getting blocked
-    # Sys.sleep(time_wait)
+    Sys.sleep(time_wait)
     
-    # if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
-    #   break
-    #   print(names(warnings()))
-    # }
-    
+    if (stringr::str_detect(names(warnings()) %>% tail(n = 1), "code 429")) { # breaks loop if blocked by Google Scholar
+      break
+      print(names(warnings()))
+    }
+
     writexl::write_xlsx(pubs, here::here("pubs.xlsx"))
     pb$tick(tokens = list(what = paste("downloaded", id)))
   }
@@ -167,10 +167,12 @@ setdiff(pubs$ID %>% unique(), ids %>% unique())
 library(dplyr)
 library(ggplot2)
 library(sjrdata)
+#devtools::install_github("ikashnitsky/sjrdata")
+
 journals <- sjr_journals %>%
   mutate(journal = stringr::str_to_lower(title), 
          .keep = "unused") %>%
-  filter(year == 2023)
+  distinct(journal, .keep_all = TRUE)
 
 exclude_names <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
   filter(is.na(Name)) %>%
@@ -178,7 +180,8 @@ exclude_names <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
 
 data <- readxl::read_xlsx(here::here("parsednames_checked.xlsx")) %>%
   select(Program, CompetitionYear, ParsedName) %>%
-  rename(Name = ParsedName)
+  rename(Name = ParsedName) %>%
+  filter(CompetitionYear > 1999)
 
 scholar_ids <- readxl::read_xlsx(here::here("scholar_ids_fields_checked.xlsx")) %>% 
   bind_rows(readxl::read_xlsx(here::here("scholar_ids_20212024.xlsx"))) %>%
@@ -198,26 +201,28 @@ pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
            stringr::word(2),
          year_paper = year,
          journal = stringr::str_to_lower(journal)) %>%
-  left_join(journals, by = "journal", relationship = "many-to-many") %>%
-  filter(!is.na(sjr_best_quartile))
+  # left_join(journals, by = "journal", relationship = "many-to-many") %>%
+  # filter(!is.na(sjr_best_quartile))
+  filter(cites > 0)
 
-scholar_pubs <- right_join(scholar_ids, pubs) %>%
+scholar_pubs <- right_join(scholar_ids, pubs, by = "ID") %>%
   right_join(data, ., relationship = "many-to-many") %>%
   mutate(Name = stringi::stri_trans_general(Name, "Latin-ASCII"),
          FirstAuthor = stringi::stri_trans_general(FirstAuthor, "Latin-ASCII"),
-         IsFirstAuthor = stringr::str_detect(Name, FirstAuthor),
-         CompetitionYear = as.numeric(CompetitionYear)-1) # !!!fixing error where I used the fiscal year and not the competition year!!!
+         # CompetitionYear = as.numeric(CompetitionYear)-1,# !!!fixing error where I used the fiscal year and not the competition year!!!
+         IsFirstAuthor = stringr::str_detect(Name, stringr::fixed(FirstAuthor))) 
 
 scholar_pubs_precomp <- scholar_pubs %>%
   group_by(CompetitionYear) %>%
-  filter(year_paper <= CompetitionYear) %>%
+  filter(year_paper <= CompetitionYear + 1) %>%
   filter(Name != "Robert Latta" | Name == "Robert Latta" & CompetitionYear > 1971)
 
 metrics <- scholar_pubs_precomp %>%
   group_by(Program, CompetitionYear, Name) %>%
   summarise(nPub = n(),
             nPub_FirstAuthor = sum(IsFirstAuthor == TRUE, na.rm = TRUE)) %>%
-  mutate(Program = case_when(Program == "EvoEco" ~ "evo. & eco.",
+  mutate(CompetitionYear = as.numeric(CompetitionYear),
+         Program = case_when(Program == "EvoEco" ~ "evo. & eco.",
                              Program == "PlantBio" ~ "plant & tree bio.",
                              Program == "AnimalBio" ~ "animal bio."))
 
@@ -231,7 +236,7 @@ plot_firstauthor_evol <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2022, 2)) +
-  # scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
+  scale_y_continuous(limits = c(0, 20)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_evol
@@ -247,19 +252,34 @@ plot_firstauthor_plant <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  # scale_y_continuous(limits = c(0, 14), breaks = seq(0, 15, 2)) +
+  scale_y_continuous(limits = c(0, 20)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_plant
-
 ggsave(here::here("firstauthorpubs_time_plantbiol.png"), plot_firstauthor_plant,
+       dpi = 300, bg = "white", height = 4, width = 5)
+
+plot_firstauthor_animal <- metrics %>% 
+  filter(Program == "animal bio.") %>% 
+  ggplot(aes(x = CompetitionYear, y = nPub_FirstAuthor)) +
+  geom_point() +
+  facet_wrap(~ Program) +
+  cowplot::theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_continuous(breaks = seq(1991, 2024, 2)) +
+  scale_y_continuous(limits = c(0, 20)) +
+  xlab("competition year") +
+  ylab("# of first author publications")
+plot_firstauthor_animal
+ggsave(here::here("firstauthorpubs_time_animalbiol.png"), plot_firstauthor_animal,
        dpi = 300, bg = "white", height = 4, width = 5)
 
 plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) +
   geom_boxplot(linewidth = 0.25, outliers = FALSE) + # already plotting all points
   ggbeeswarm::geom_quasirandom(color = "black", size = 0.5, varwidth = TRUE) +
   cowplot::theme_cowplot() +
-  # scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
+  scale_y_continuous(limits = c(0, 20)) +
+  theme(axis.text.x = element_text(hjust = 0.9, angle = 15)) +
   xlab("research subject") +
   ylab("# of first author publications")
 plot_firstauthor_all
