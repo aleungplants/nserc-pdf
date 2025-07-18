@@ -201,9 +201,9 @@ pubs <- readxl::read_xlsx(here::here("pubs.xlsx")) %>%
            stringr::word(2),
          year_paper = year,
          journal = stringr::str_to_lower(journal)) %>%
-  # left_join(journals, by = "journal", relationship = "many-to-many") %>%
-  # filter(!is.na(sjr_best_quartile))
-  filter(cites > 0)
+  left_join(journals, by = "journal", relationship = "many-to-many") %>%
+  filter(!is.na(sjr_best_quartile))
+  # filter(cites > 0)
 
 scholar_pubs <- right_join(scholar_ids, pubs, by = "ID") %>%
   right_join(data, ., relationship = "many-to-many") %>%
@@ -214,7 +214,7 @@ scholar_pubs <- right_join(scholar_ids, pubs, by = "ID") %>%
 
 scholar_pubs_precomp <- scholar_pubs %>%
   group_by(CompetitionYear) %>%
-  filter(year_paper <= CompetitionYear + 1) %>%
+  filter(year_paper <= CompetitionYear) %>%
   filter(Name != "Robert Latta" | Name == "Robert Latta" & CompetitionYear > 1971)
 
 metrics <- scholar_pubs_precomp %>%
@@ -236,7 +236,7 @@ plot_firstauthor_evol <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2022, 2)) +
-  scale_y_continuous(limits = c(0, 20)) +
+  scale_y_continuous(limits = c(0, 30)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_evol
@@ -252,7 +252,7 @@ plot_firstauthor_plant <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 20)) +
+  scale_y_continuous(limits = c(0, 30)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_plant
@@ -267,7 +267,7 @@ plot_firstauthor_animal <- metrics %>%
   cowplot::theme_cowplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_x_continuous(breaks = seq(1991, 2024, 2)) +
-  scale_y_continuous(limits = c(0, 20)) +
+  scale_y_continuous(limits = c(0, 30)) +
   xlab("competition year") +
   ylab("# of first author publications")
 plot_firstauthor_animal
@@ -278,7 +278,7 @@ plot_firstauthor_all <- ggplot(metrics, aes(x = Program, y = nPub_FirstAuthor)) 
   geom_boxplot(linewidth = 0.25, outliers = FALSE) + # already plotting all points
   ggbeeswarm::geom_quasirandom(color = "black", size = 0.5, varwidth = TRUE) +
   cowplot::theme_cowplot() +
-  scale_y_continuous(limits = c(0, 20)) +
+  scale_y_continuous(limits = c(0, 30)) +
   theme(axis.text.x = element_text(hjust = 0.9, angle = 15)) +
   xlab("research subject") +
   ylab("# of first author publications")
@@ -299,6 +299,7 @@ summary <- metrics %>%
                         q1 = ~quantile(., prob = 0.25),
                         q3 = ~quantile(., prob = 0.75))))
 summary
+writexl::write_xlsx(summary, here::here("summary.xlsx"))
 
 
 
